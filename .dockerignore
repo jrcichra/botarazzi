@@ -1,3 +1,2 @@
 .vscode/launch.json
-*.ogg
-!welcome.ogg
+recordings
