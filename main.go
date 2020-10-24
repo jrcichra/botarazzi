@@ -211,7 +211,7 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, gid strin
 
 func playSound(v *discordgo.VoiceConnection) {
 	// Encoding a file and saving it to disk
-	encodeSession, err := dca.EncodeFile("this_meeting_is_being_recorded.ogg", dca.StdEncodeOptions)
+	encodeSession, err := dca.EncodeFile("welcome.ogg", dca.StdEncodeOptions)
 	if err != nil {
 		panic(err)
 	}
