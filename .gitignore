@@ -1,1 +1,4 @@
 botarazzi
+.vscode/launch.json
+*.ogg
+!this_meeting_is_being_recorded.ogg
