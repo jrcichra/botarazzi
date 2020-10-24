@@ -39,7 +39,8 @@ func main() {
 	}
 	// Register the messageCreate func as a callback for MessageCreate events.
 	dg.AddHandler(messageCreate)
-
+	// Look at voice state changes
+	dg.AddHandler(voiceStateUpdate)
 	// Get all intents
 	dg.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsAllWithoutPrivileged)
 
@@ -117,7 +118,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 					}
 					if vcUser.ID == m.Author.ID {
 						found = true
-						v, err := s.ChannelVoiceJoin(guild.ID, channel.ID, true, false)
+						v, err := s.ChannelVoiceJoin(guild.ID, channel.ID, false, false)
 						if err != nil {
 							s.ChannelMessageSend(m.ChannelID, "failed to join voice channel: "+err.Error())
 							return
@@ -135,6 +136,17 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if !found {
 			s.ChannelMessageSend(m.ChannelID, "Cannot join. "+m.Author.Username+" is not in a voice channel")
 		}
+	}
+}
+
+func voiceStateUpdate(s *discordgo.Session, m *discordgo.VoiceStateUpdate) {
+
+	fmt.Println("Change in voice state")
+	if m.ChannelID == "" { //User disconnected from a voice channel
+		println(m.UserID, " left channel ", m.ChannelID)
+	} else {
+		//We need to capture a join as "this is a user we should record"
+
 	}
 }
 
@@ -173,24 +185,31 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, gid strin
 	files := make(map[uint32]media.Writer)
 	done := false
 
+	// get date for folder
+	d := time.Now().Unix()
+	err := os.MkdirAll(fmt.Sprintf("%d", d), 0755)
+	if err != nil {
+		panic(err)
+	}
+
 	for !done {
 		select {
 		case p := <-v.OpusRecv:
 			file, ok := files[p.SSRC]
 			if !ok {
 				var err error
-				file, err = oggwriter.New(fmt.Sprintf("%d.ogg", p.SSRC), 48000, 2)
+				file, err = oggwriter.New(fmt.Sprintf("%d/%d.ogg", d, p.SSRC), 48000, 2)
 				if err != nil {
-					fmt.Printf("failed to create file %d.ogg, giving up on recording: %v\n", p.SSRC, err)
+					fmt.Printf("failed to create file %d/%d.ogg, giving up on recording: %v\n", d, p.SSRC, err)
 					return
 				}
 				files[p.SSRC] = file
 			}
 			// Construct pion RTP packet from DiscordGo's type.
 			rtp := createPionRTPPacket(p)
-			err := file.WriteRTP(rtp)
+			err = file.WriteRTP(rtp)
 			if err != nil {
-				fmt.Printf("failed to write to file %d.ogg, giving up on recording: %v\n", p.SSRC, err)
+				fmt.Printf("failed to write to file %d/%d.ogg, giving up on recording: %v\n", d, p.SSRC, err)
 			}
 		case <-c:
 			// Once we made it here, we're done listening for packets. Close all files
@@ -234,6 +253,4 @@ func playSound(v *discordgo.VoiceConnection) {
 			return
 		}
 	}
-
-	// io.Copy(output, encodeSession)
 }
