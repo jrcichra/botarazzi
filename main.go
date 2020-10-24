@@ -187,45 +187,49 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, gid strin
 
 	// get date for folder
 	d := time.Now().Unix()
-	err := os.MkdirAll(fmt.Sprintf("%d", d), 0755)
+	err := os.MkdirAll(fmt.Sprintf("recordings/%d", d), 0755)
 	if err != nil {
 		panic(err)
 	}
 
 	for !done {
 		select {
-		case p := <-v.OpusRecv:
-			file, ok := files[p.SSRC]
-			if !ok {
-				var err error
-				file, err = oggwriter.New(fmt.Sprintf("%d/%d.ogg", d, p.SSRC), 48000, 2)
-				if err != nil {
-					fmt.Printf("failed to create file %d/%d.ogg, giving up on recording: %v\n", d, p.SSRC, err)
-					return
+		case p, open := <-v.OpusRecv:
+			if open {
+				file, ok := files[p.SSRC]
+				if !ok {
+					var err error
+					file, err = oggwriter.New(fmt.Sprintf("recordings/%d/%d.ogg", d, p.SSRC), 48000, 2)
+					if err != nil {
+						fmt.Printf("failed to create file recordings/%d/%d.ogg, giving up on recording: %v\n", d, p.SSRC, err)
+						return
+					}
+					files[p.SSRC] = file
 				}
-				files[p.SSRC] = file
-			}
-			// Construct pion RTP packet from DiscordGo's type.
-			rtp := createPionRTPPacket(p)
-			err = file.WriteRTP(rtp)
-			if err != nil {
-				fmt.Printf("failed to write to file %d/%d.ogg, giving up on recording: %v\n", d, p.SSRC, err)
+				// Construct pion RTP packet from DiscordGo's type.
+				rtp := createPionRTPPacket(p)
+				err = file.WriteRTP(rtp)
+				if err != nil {
+					fmt.Printf("failed to write to file recordings/%d/%d.ogg, giving up on recording: %v\n", d, p.SSRC, err)
+				}
+			} else {
+				// Once we made it here, we're done listening for packets. Close all files
+				for _, f := range files {
+					f.Close()
+				}
+				//Break the loop
+				done = true
 			}
 		case <-c:
-			// Once we made it here, we're done listening for packets. Close all files
-			for _, f := range files {
-				f.Close()
-			}
 			//close the voiceconnection
 			close(v.OpusRecv)
 			v.Close()
 			v.Disconnect()
 			//Remove ourselves from the mapping
 			delete(VoiceConnections, gid)
-			//Break the loop
-			done = true
 		}
 	}
+
 }
 
 func playSound(v *discordgo.VoiceConnection) {
