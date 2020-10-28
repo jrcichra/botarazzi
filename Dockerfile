@@ -5,5 +5,5 @@ RUN go build
 FROM alpine:3.12
 WORKDIR     /app
 COPY --from=builder /app/botarazzi .
-RUN apk add ffmpeg
+RUN apk add ffmpeg ffprobe ffplay
 CMD ./botarazzi
