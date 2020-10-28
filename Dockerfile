@@ -5,5 +5,5 @@ RUN go build
 FROM debian
 WORKDIR     /app
 COPY --from=builder /app/botarazzi .
-RUN apk add ffmpeg ffprobe ffplay
+RUN sudo apt update && sudo apt install  ffmpeg ffprobe ffplay
 CMD ./botarazzi
