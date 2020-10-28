@@ -5,5 +5,5 @@ RUN go build
 FROM debian
 WORKDIR     /app
 COPY --from=builder /app/botarazzi .
-RUN apt update && apt install ffmpeg
+RUN apt update && apt install -y ffmpeg
 CMD ./botarazzi
