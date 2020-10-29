@@ -5,4 +5,5 @@ RUN go build
 FROM sjourdan/ffprobe
 WORKDIR /app
 COPY --from=builder /app/botarazzi .
+RUN apk add ca-certificates
 CMD ./botarazzi
