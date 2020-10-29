@@ -1,2 +1,5 @@
 .vscode/launch.json
 recordings
+Dockerfile
+.github/
+LICENSE
