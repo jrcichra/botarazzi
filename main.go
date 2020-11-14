@@ -202,7 +202,7 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, gid strin
 					file, err = oggwriter.New(fmt.Sprintf("recordings/%d/%d.ogg", d, p.SSRC), 48000, 2)
 					if err != nil {
 						fmt.Printf("failed to create file recordings/%d/%d.ogg, giving up on recording: %v\n", d, p.SSRC, err)
-						return
+						continue
 					}
 					files[p.SSRC] = file
 				}
