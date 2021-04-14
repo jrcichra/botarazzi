@@ -160,12 +160,6 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, s *discor
 	}
 	files := make(map[uint32]media.Writer)
 
-	defer func() {
-		if err := recover(); err != nil {
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintln(err))
-		}
-	}()
-
 	for p := range v.OpusRecv {
 		file, ok := files[p.SSRC]
 		if !ok {
@@ -205,11 +199,13 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, s *discor
 		f.Close()
 	}
 	// Close the voice web socket
+	fmt.Println("Calling v.Close...")
 	v.Close()
 	// Remove ourselves from the global mapping
 	delete(VoiceConnections, gid)
 
 	// Disconnect the bot
+	fmt.Println("Calling v.Disconnect...")
 	v.Disconnect()
 
 	//find all the ogg files
