@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -225,21 +224,10 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, s *discor
 			if err != nil {
 				s.ChannelMessageSend(m.ChannelID, fmt.Sprintln(err))
 			}
-			//check if the file we want to write exists. If it does, increment the number
-			digit := 1
-			cont := true
-			for cont {
-				_, err = os.Open(fmt.Sprintf("recordings/%d/%s-%d.ogg", d, user.Username, digit))
-				if errors.Is(err, os.ErrNotExist) {
-					cont = false
-				} else {
-					digit += 1
-				}
-			}
 			// we're ready to open the file
-			file, err = oggwriter.New(fmt.Sprintf("recordings/%d/%s-%d.ogg", d, user.Username, digit), 48000, 2)
+			file, err = oggwriter.New(fmt.Sprintf("recordings/%d/%s-%d.ogg", d, user.Username, time.Now().Unix()), 48000, 2)
 			if err != nil {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("failed to create file recordings/%d/%s-%d.ogg, giving up on recording: %v\n", d, user.Username, digit, err))
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("failed to create file recordings/%d/%s-%d.ogg, giving up on recording: %v\n", d, user.Username, time.Now().Unix(), err))
 			}
 			files[p.SSRC] = file
 		}
