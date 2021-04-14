@@ -159,6 +159,13 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, s *discor
 		panic(err)
 	}
 	files := make(map[uint32]media.Writer)
+
+	defer func() {
+		if err := recover(); err != nil {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintln(err))
+		}
+	}()
+
 	for p := range v.OpusRecv {
 		file, ok := files[p.SSRC]
 		if !ok {
@@ -201,8 +208,6 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, s *discor
 	v.Close()
 	// Remove ourselves from the global mapping
 	delete(VoiceConnections, gid)
-
-	time.Sleep(1 * time.Second)
 
 	// Disconnect the bot
 	v.Disconnect()
