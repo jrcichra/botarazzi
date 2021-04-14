@@ -197,11 +197,15 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, s *discor
 		// Close the file
 		f.Close()
 	}
-	// Disconnect the bot
-	v.Disconnect()
-
+	// Close the voice web socket
+	v.Close()
 	// Remove ourselves from the global mapping
 	delete(VoiceConnections, gid)
+
+	time.Sleep(1 * time.Second)
+
+	// Disconnect the bot
+	v.Disconnect()
 
 	//find all the ogg files
 	ogg_files, err := filepath.Glob(fmt.Sprintf("recordings/%d/*.ogg", d))
