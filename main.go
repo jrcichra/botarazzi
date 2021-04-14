@@ -25,7 +25,7 @@ func init() {
 	VoiceConnections = make(map[string]chan struct{})
 	SpeakerStreams = make(map[int]string)
 	flag.StringVar(&Token, "t", "", "Bot Token")
-	flag.StringVar(&Hostname, "h", "http://localhost", "Hostname to serve zips")
+	flag.StringVar(&Hostname, "h", "http://localhost:8080", "Hostname to serve zips")
 	flag.Parse()
 }
 
