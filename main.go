@@ -178,9 +178,9 @@ func createPionRTPPacket(p *discordgo.Packet) *rtp.Packet {
 func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, gid string) {
 
 	//play a sound when we join
-	v.Speaking(true)
-	playSound(v)
-	v.Speaking(false)
+	// v.Speaking(true)
+	// playSound(v)
+	// v.Speaking(false)
 
 	files := make(map[uint32]media.Writer)
 	done := false
