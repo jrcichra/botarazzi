@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -23,10 +24,13 @@ var (
 	Token string
 	//VoiceConnections -
 	VoiceConnections map[string]chan struct{}
+	//Speaker Streams - takes an ssrc and returns a userid
+	SpeakerStreams map[int]string
 )
 
 func init() {
 	VoiceConnections = make(map[string]chan struct{})
+	SpeakerStreams = make(map[int]string)
 	flag.StringVar(&Token, "t", "", "Bot Token")
 	flag.Parse()
 }
@@ -126,7 +130,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 						// Add chan to voice channel map
 						c := make(chan struct{})
 						VoiceConnections[guild.ID] = c
-						go handleVoiceChannel(v, c, guild.ID)
+						go handleVoiceChannel(v, c, s, m, guild.ID)
 					}
 				}
 
@@ -140,14 +144,17 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func voiceStateUpdate(s *discordgo.Session, m *discordgo.VoiceStateUpdate) {
-
 	fmt.Println("Change in voice state")
 	if m.ChannelID == "" { //User disconnected from a voice channel
 		println(m.UserID, " left channel ", m.ChannelID)
-	} else {
-		//We need to capture a join as "this is a user we should record"
-
 	}
+}
+
+func voiceSpeakingUpdate(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
+	fmt.Println("Someone is speaking")
+	// map who is speaking to a global state.
+	// at some point, entries in this map should be garbage collected. Likely when we leave a channel
+	SpeakerStreams[vs.SSRC] = vs.UserID
 }
 
 // VoiceChannelUsers returns IDS of users present in given channelID
@@ -175,15 +182,24 @@ func createPionRTPPacket(p *discordgo.Packet) *rtp.Packet {
 	}
 }
 
-func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, gid string) {
+func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, s *discordgo.Session, m *discordgo.MessageCreate, gid string) {
 
 	//play a sound when we join
 	// v.Speaking(true)
 	// playSound(v)
 	// v.Speaking(false)
 
-	files := make(map[uint32]media.Writer)
-	done := false
+	// attach handler to channel for speaking updates
+	v.AddHandler(voiceSpeakingUpdate)
+
+	s.ChannelMessageSend(m.ChannelID, fmt.Sprintln("Started recording..."))
+	//background function that listens for the leave message to close up shop
+	go func() {
+		<-c
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintln("Leaving & stopping recording..."))
+		//this breaks the for loop below
+		close(v.OpusRecv)
+	}()
 
 	// get date for folder
 	d := time.Now().Unix()
@@ -191,52 +207,70 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, gid strin
 	if err != nil {
 		panic(err)
 	}
-
-	for !done {
-		select {
-		case p, open := <-v.OpusRecv:
-			if open {
-				file, ok := files[p.SSRC]
-				if !ok {
-					var err error
-					file, err = oggwriter.New(fmt.Sprintf("recordings/%d/%d.ogg", d, p.SSRC), 48000, 2)
-					if err != nil {
-						fmt.Printf("failed to create file recordings/%d/%d.ogg, giving up on recording: %v\n", d, p.SSRC, err)
-						continue
-					}
-					files[p.SSRC] = file
+	files := make(map[uint32]media.Writer)
+	for p := range v.OpusRecv {
+		file, ok := files[p.SSRC]
+		if !ok {
+			// look up user for this stream. Block until the map has it cause there's a potential race. Any block should hopefully queue up on the other end and not affect the audio stream
+			found := false
+			for !found {
+				if _, ok2 := SpeakerStreams[int(p.SSRC)]; ok2 {
+					found = true
+				} else {
+					// i'm polling for now
+					time.Sleep(50 * time.Millisecond)
 				}
-				// Construct pion RTP packet from DiscordGo's type.
-				rtp := createPionRTPPacket(p)
-				err = file.WriteRTP(rtp)
-				if err != nil {
-					fmt.Printf("failed to write to file recordings/%d/%d.ogg, giving up on recording: %v\n", d, p.SSRC, err)
-				}
-			} else {
-				// Once we made it here, we're done listening for packets. Close all files
-				for _, f := range files {
-					f.Close()
-				}
-				//Break the loop
-				done = true
 			}
-		case <-c:
-			//close the voiceconnection
-			close(v.OpusRecv)
-			v.Close()
-			v.Disconnect()
-			//Remove ourselves from the mapping
-			delete(VoiceConnections, gid)
+			user, err := s.User(SpeakerStreams[int(p.SSRC)])
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintln(err))
+			}
+			//check if the file we want to write exists. If it does, increment the number
+			digit := 1
+			cont := true
+			for cont {
+				_, err = os.Open(fmt.Sprintf("recordings/%d/%s-%d.ogg", d, user.Username, digit))
+				if errors.Is(err, os.ErrNotExist) {
+					cont = false
+				} else {
+					digit += 1
+				}
+			}
+			// we're ready to open the file
+			file, err = oggwriter.New(fmt.Sprintf("recordings/%d/%s-%d.ogg", d, user.Username, digit), 48000, 2)
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("failed to create file recordings/%d/%s-%d.ogg, giving up on recording: %v\n", d, user.Username, digit, err))
+			}
+			files[p.SSRC] = file
+		}
+		// Construct pion RTP packet from DiscordGo's type.
+		rtp := createPionRTPPacket(p)
+		err = file.WriteRTP(rtp)
+		if err != nil {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("failed to write to file. giving up on recording: %v\n", err))
 		}
 	}
+	// Once we made it here, we're done listening for packets. Close all files
+	for key, f := range files {
+		// Remove SSRC entries from the speaker mapping (avoid a memory leak)
+		delete(SpeakerStreams, int(key))
+		// Close the file
+		f.Close()
+	}
+	// Close the voice web socket
+	v.Close()
+	// Remove ourselves from the global mapping
+	delete(VoiceConnections, gid)
 
+	// Disconnect the bot
+	v.Disconnect()
 }
 
 func playSound(v *discordgo.VoiceConnection) {
 	// Encoding a file and saving it to disk
 	encodeSession, err := dca.EncodeFile("welcome.ogg", dca.StdEncodeOptions)
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
 	}
 	// Make sure everything is cleaned up, that for example the encoding process if any issues happened isnt lingering around
 	defer encodeSession.Cleanup()
