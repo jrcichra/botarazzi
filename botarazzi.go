@@ -221,7 +221,7 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, s *discor
 	//flush it to disk
 	storeZipMap()
 	// tell the user how to get their recording
-	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("The zip for this session lives at http://%s/%s.zip", Hostname, id))
+	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("The zip for this session lives at %s/%s.zip", Hostname, id))
 }
 
 func playSound(v *discordgo.VoiceConnection) {
