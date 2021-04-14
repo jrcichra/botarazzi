@@ -145,11 +145,26 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, s *discor
 
 	s.ChannelMessageSend(m.ChannelID, fmt.Sprintln("Started recording..."))
 	//background function that listens for the leave message to close up shop
+	cont := make(chan struct{})
 	go func() {
 		<-c
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintln("Leaving & stopping recording..."))
 		//this breaks the for loop below
+		//Wait for speaking to stop before closing
+
 		close(v.OpusRecv)
+		// Close the voice web socket
+		fmt.Println("Calling v.Close...")
+		v.Close()
+		// Remove ourselves from the global mapping
+		delete(VoiceConnections, gid)
+
+		// Disconnect the bot
+		fmt.Println("Calling v.Disconnect...")
+		v.Disconnect()
+
+		//hacky timing stuff
+		cont <- struct{}{}
 	}()
 
 	// get date for folder
@@ -198,15 +213,9 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, s *discor
 		// Close the file
 		f.Close()
 	}
-	// Close the voice web socket
-	fmt.Println("Calling v.Close...")
-	v.Close()
-	// Remove ourselves from the global mapping
-	delete(VoiceConnections, gid)
 
-	// Disconnect the bot
-	fmt.Println("Calling v.Disconnect...")
-	v.Disconnect()
+	//hacky timing
+	<-cont
 
 	//find all the ogg files
 	ogg_files, err := filepath.Glob(fmt.Sprintf("recordings/%d/*.ogg", d))
