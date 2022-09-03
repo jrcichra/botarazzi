@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,7 +38,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if strings.ToLower(m.Content) == "!leave" {
 		//Leave the guild's voice if we were in it
 		if _, ok := VoiceConnections[m.GuildID]; ok {
-			VoiceConnections[m.GuildID] <- struct{}{}
+			VoiceConnections[m.GuildID]() // cancel the context
+			delete(VoiceConnections, m.GuildID)
 		} else {
 			s.ChannelMessageSend(m.ChannelID, "Cannot leave. Bot was not in a voice channel")
 		}
@@ -59,7 +62,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		found := false
 		for _, channel := range channels {
 			if channel.Type == discordgo.ChannelTypeGuildVoice {
-
 				vcUserIDs, err := voiceChannelUsers(s, channel.ID, guild, s.VoiceConnections)
 				if err != nil {
 					panic(err)
@@ -78,10 +80,10 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 							s.ChannelMessageSend(m.ChannelID, "failed to join voice channel: "+err.Error())
 							return
 						}
-						// Add chan to voice channel map
-						c := make(chan struct{})
-						VoiceConnections[guild.ID] = c
-						go handleVoiceChannel(v, c, s, m, guild.ID)
+
+						ctx, cancel := context.WithCancel(context.Background())
+						VoiceConnections[guild.ID] = cancel
+						go handleVoiceChannel(v, ctx, s, m, guild.ID)
 					}
 				}
 
@@ -133,38 +135,32 @@ func createPionRTPPacket(p *discordgo.Packet) *rtp.Packet {
 	}
 }
 
-func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, s *discordgo.Session, m *discordgo.MessageCreate, gid string) {
+func handleVoiceChannel(v *discordgo.VoiceConnection, ctx context.Context, s *discordgo.Session, m *discordgo.MessageCreate, gid string) {
 
 	//play a sound when we join
-	// v.Speaking(true)
-	// playSound(v)
-	// v.Speaking(false)
+	// go func() {
+	// 	v.Speaking(true)
+	// 	playSound(v)
+	// 	v.Speaking(false)
+	// }()
 
 	// attach handler to channel for speaking updates
 	v.AddHandler(voiceSpeakingUpdate)
 
 	s.ChannelMessageSend(m.ChannelID, fmt.Sprintln("Started recording..."))
-	//background function that listens for the leave message to close up shop
-	cont := make(chan struct{})
+
+	//background function that listens for the context to cancel before shutting down
 	go func() {
-		<-c
+		<-ctx.Done()
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintln("Leaving & stopping recording..."))
 		//this breaks the for loop below
-		//Wait for speaking to stop before closing
-
 		close(v.OpusRecv)
-		// Close the voice web socket
-		fmt.Println("Calling v.Close...")
 		v.Close()
-		// Remove ourselves from the global mapping
-		delete(VoiceConnections, gid)
-
+		time.Sleep(1 * time.Second)
 		// Disconnect the bot
 		fmt.Println("Calling v.Disconnect...")
 		v.Disconnect()
 
-		//hacky timing stuff
-		cont <- struct{}{}
 	}()
 
 	// get date for folder
@@ -214,10 +210,7 @@ func handleVoiceChannel(v *discordgo.VoiceConnection, c chan struct{}, s *discor
 		f.Close()
 	}
 
-	//hacky timing
-	<-cont
-
-	//find all the ogg files
+	// find all the ogg files
 	ogg_files, err := filepath.Glob(fmt.Sprintf("recordings/%d/*.ogg", d))
 	if err != nil {
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Can't zip up ogg files: %v\n", err))
@@ -249,9 +242,9 @@ func playSound(v *discordgo.VoiceConnection) {
 		frame, err := encodeSession.OpusFrame()
 		if err != nil {
 			if err != io.EOF {
+				log.Println("Unexpected error", err)
 				// Handle the error
 			}
-
 			break
 		}
 		select {

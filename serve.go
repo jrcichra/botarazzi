@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 )
@@ -30,7 +30,7 @@ func serve() {
 	}
 }
 
-//adapted from https://stackoverflow.com/questions/19762413/how-to-serialize-deserialize-a-map-in-go
+// adapted from https://stackoverflow.com/questions/19762413/how-to-serialize-deserialize-a-map-in-go
 func storeZipMap() {
 	b := new(bytes.Buffer)
 	e := gob.NewEncoder(b)
@@ -40,7 +40,7 @@ func storeZipMap() {
 		fmt.Println(err)
 		return
 	}
-	err = ioutil.WriteFile(ZipMapFile, b.Bytes(), 0644)
+	err = os.WriteFile(ZipMapFile, b.Bytes(), 0644)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -48,7 +48,7 @@ func storeZipMap() {
 }
 
 func restoreZipMap() {
-	rb, err := ioutil.ReadFile(ZipMapFile)
+	rb, err := os.ReadFile(ZipMapFile)
 	if err != nil {
 		fmt.Println(err)
 		return

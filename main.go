@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -16,13 +17,13 @@ var (
 	//Hostname is where the link will give botarazzi for downloads
 	Hostname string
 	//VoiceConnections -
-	VoiceConnections map[string]chan struct{}
+	VoiceConnections map[string]context.CancelFunc
 	//Speaker Streams - takes an ssrc and returns a userid
 	SpeakerStreams map[int]string
 )
 
 func init() {
-	VoiceConnections = make(map[string]chan struct{})
+	VoiceConnections = make(map[string]context.CancelFunc)
 	SpeakerStreams = make(map[int]string)
 	flag.StringVar(&Token, "t", "", "Bot Token")
 	flag.StringVar(&Hostname, "h", "http://localhost:8080", "Hostname to serve zips")
@@ -42,7 +43,7 @@ func main() {
 	// Look at voice state changes
 	dg.AddHandler(voiceStateUpdate)
 	// Get all intents
-	dg.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsAllWithoutPrivileged)
+	dg.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsAll)
 
 	// Open a websocket connection to Discord and begin listening.
 	err = dg.Open()
@@ -54,7 +55,7 @@ func main() {
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 
 	// Cleanly close down the Discord session.
