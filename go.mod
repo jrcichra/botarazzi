@@ -10,5 +10,5 @@ require (
 	github.com/jonas747/ogg v0.0.0-20161220051205-b4f6f4cf3757 // indirect
 	github.com/pion/rtp v1.7.13
 	github.com/pion/webrtc/v3 v3.1.43
-	golang.org/x/crypto v0.31.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 )
